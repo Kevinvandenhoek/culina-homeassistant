@@ -94,6 +94,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._lock = asyncio.Lock()
         self._radio = RadioBrowser(user_agent=USER_AGENT, session=async_get_clientsession(hass))
         self._stations: dict[str, RadioStation | None] = {}
+        self._music_tried_for: str | None = None
         self._socket = CulinaSocket(
             entry.data[CONF_TOKEN],
             on_connect=self._on_connect,
@@ -170,6 +171,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         recipe_changed = previous is None or previous.recipe_id != new.recipe_id
         if recipe_changed:
             self._music_started = False
+            self._music_tried_for = None
         if recipe_changed or self.recipe is None or self.recipe.id != new.recipe_id:
             await self._load_recipe(new.recipe_id)
         if not new.paused and not self._music_started:
@@ -283,6 +285,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
                         "text": text,
                     },
                 )
+            _LOGGER.info("Announcing at %ss: %s", round(group[0].at), " / ".join(texts))
             if self.entry.options.get(CONF_ANNOUNCEMENTS, True):
                 await self._speak(". ".join(texts))
             self._publish()
@@ -318,33 +321,45 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         """A mapping from the options wins; otherwise a radio station for the cuisine."""
         if not self.entry.options.get(CONF_MUSIC, True) or self.recipe is None:
             return
+        if self._music_tried_for == self.recipe.id:
+            return  # one attempt per recipe, a seek must not retry a failing stream
+        self._music_tried_for = self.recipe.id
         cuisine_id = self.recipe.cuisine_id
         media = (self.entry.options.get(CONF_CUISINE_MEDIA) or {}).get(cuisine_id or "")
         station: RadioStation | None = None
         if media:
-            content_id, content_type = media["media_content_id"], media["media_content_type"]
+            candidates = [(media["media_content_id"], media["media_content_type"])]
             what = f"mapped media for {cuisine_id}"
         else:
             station = await self._radio_station(cuisine_id)
             if station is None:
                 _LOGGER.info("No music for cuisine %s", cuisine_id)
                 return
-            content_id, content_type = station.url, "music"
+            # Through the Radio Browser media source when it is set up: Sonos
+            # then treats the stream as radio instead of a file and accepts it.
+            # The bare URL is the fallback for players without it.
+            candidates = []
+            if "radio_browser" in self.hass.config.components:
+                candidates.append((f"media-source://radio_browser/{station.uuid}", "music"))
+            candidates.append((station.url, "music"))
             what = f"radio station {station.name}"
         player = self.entry.data[CONF_MEDIA_PLAYER]
-        try:
-            await self.hass.services.async_call(
-                "media_player",
-                "play_media",
-                {
-                    "entity_id": player,
-                    "media_content_id": content_id,
-                    "media_content_type": content_type,
-                },
-                blocking=True,
-            )
-        except HomeAssistantError as err:
-            _LOGGER.warning("Could not play %s on %s: %s", what, player, err)
+        for content_id, content_type in candidates:
+            try:
+                await self.hass.services.async_call(
+                    "media_player",
+                    "play_media",
+                    {
+                        "entity_id": player,
+                        "media_content_id": content_id,
+                        "media_content_type": content_type,
+                    },
+                    blocking=True,
+                )
+                break
+            except HomeAssistantError as err:
+                _LOGGER.warning("Could not play %s (%s) on %s: %s", what, content_id, player, err)
+        else:
             return
         _LOGGER.info("Playing %s on %s", what, player)
         self._music_started = True
