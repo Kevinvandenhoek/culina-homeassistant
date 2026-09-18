@@ -8,7 +8,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "custom_components" / "culina"))
 
 from cuisines import CUISINES  # noqa: E402
-from radio import CUISINE_COUNTRY, CUISINE_TAGS, first_playable  # noqa: E402
+from radio import CUISINE_COUNTRY, CUISINE_TAGS, first_playable, looks_like_mp3  # noqa: E402
 
 
 def station(**kwargs):
@@ -51,3 +51,18 @@ class PlayableTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Mp3SniffTest(unittest.TestCase):
+    def test_mp3_frame(self):
+        self.assertTrue(looks_like_mp3(b"\xff\xfb\x90\x00" + b"\x00" * 20))
+
+    def test_adts_aac_on_mp3_url(self):
+        self.assertFalse(looks_like_mp3(b"\xff\xf1\x50\x80\x44\x1f\xfc" + b"\x00" * 20))
+
+    def test_id3_then_mp3(self):
+        id3 = b"ID3\x04\x00\x00\x00\x00\x00\x05" + b"\x00" * 5
+        self.assertTrue(looks_like_mp3(id3 + b"\xff\xfb\x90\x00"))
+
+    def test_garbage(self):
+        self.assertFalse(looks_like_mp3(b"<html>not audio</html>"))

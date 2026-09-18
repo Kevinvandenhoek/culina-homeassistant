@@ -20,7 +20,7 @@ from homeassistant.util import dt as dt_util
 from radios import RadioBrowser
 
 from .api import CulinaApi, CulinaApiError, CulinaNotFoundError, CulinaSocket
-from .radio import USER_AGENT, RadioStation, find_stations, register_click
+from .radio import USER_AGENT, RadioStation, find_stations, register_click, serves_mp3
 from .const import (
     CONF_ANNOUNCEMENTS,
     CONF_MEDIA_PLAYER,
@@ -376,7 +376,11 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
             return []
         if cuisine_id not in self._stations:
             try:
-                self._stations[cuisine_id] = await find_stations(cuisine_id, browser=self._radio)
+                self._stations[cuisine_id] = await find_stations(
+                    cuisine_id,
+                    browser=self._radio,
+                    probe=partial(serves_mp3, async_get_clientsession(self.hass)),
+                )
             except Exception as err:  # noqa: BLE001 - Radio Browser is best effort
                 _LOGGER.warning("Radio Browser lookup for %s failed: %s", cuisine_id, err)
                 return []

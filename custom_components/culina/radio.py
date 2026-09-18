@@ -10,8 +10,10 @@ without Home Assistant.
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+import aiohttp
 from radios import FilterBy, Order, RadioBrowser, Station
 
 _LOGGER = logging.getLogger(__name__)
@@ -115,6 +117,44 @@ CUISINE_TAGS: dict[str, list[str]] = {
 }
 
 
+def looks_like_mp3(data: bytes) -> bool:
+    """True when the first audio frame in `data` is MPEG Layer III.
+
+    Radio Browser trusts the station's own codec label, and some stations
+    serve AAC on a `.mp3` URL with `audio/mpeg` headers. Sonos then decodes
+    silence while reporting that it plays. So look at the bytes.
+    """
+    if data.startswith(b"ID3") and len(data) >= 10:
+        size = 0
+        for byte in data[6:10]:
+            size = (size << 7) | (byte & 0x7F)
+        data = data[10 + size :]
+    for i in range(len(data) - 1):
+        if data[i] != 0xFF or data[i + 1] & 0xE0 != 0xE0:
+            continue
+        layer = (data[i + 1] >> 1) & 0x03
+        return layer == 0x01  # 01 = Layer III; 00 = ADTS AAC uses the same sync
+    return False
+
+
+async def serves_mp3(session: aiohttp.ClientSession, url: str) -> bool:
+    """Fetch the first bytes of a stream and check that it really is MP3."""
+    try:
+        async with session.get(
+            url, headers={"Icy-MetaData": "0"}, timeout=aiohttp.ClientTimeout(total=8)
+        ) as response:
+            if response.status >= 400:
+                return False
+            data = await response.content.read(8192)
+    except (aiohttp.ClientError, TimeoutError, OSError) as err:
+        _LOGGER.debug("Stream probe failed for %s: %s", url, err)
+        return False
+    return looks_like_mp3(data)
+
+
+Probe = Callable[[str], Awaitable[bool]]
+
+
 @dataclass(frozen=True)
 class RadioStation:
     uuid: str
@@ -164,21 +204,30 @@ def _as_station(station: Station, tag: str | None) -> RadioStation:
 
 
 async def find_stations(
-    cuisine_id: str, *, browser: RadioBrowser | None = None, limit: int = 3
+    cuisine_id: str,
+    *,
+    browser: RadioBrowser | None = None,
+    limit: int = 3,
+    probe: Probe | None = None,
 ) -> list[RadioStation]:
     """Candidate stations for the cuisine, best first. A stream that Radio
     Browser marks as working can still be refused by a speaker, so the caller
-    tries them in order."""
+    tries them in order. With a `probe`, only streams that really serve MP3
+    are kept."""
     own = browser is None
     browser = browser or RadioBrowser(user_agent=USER_AGENT)
     found: list[RadioStation] = []
     seen: set[str] = set()
 
-    def add(stations: list[Station], tag: str | None) -> None:
+    async def add(stations: list[Station], tag: str | None) -> None:
         for station in stations:
-            if station.uuid not in seen and len(found) < limit:
-                seen.add(station.uuid)
-                found.append(_as_station(station, tag))
+            if station.uuid in seen or len(found) >= limit:
+                continue
+            seen.add(station.uuid)
+            if probe is not None and not await probe(station.url_resolved):
+                _LOGGER.debug("Skipping %s: stream is not MP3", station.name)
+                continue
+            found.append(_as_station(station, tag))
 
     try:
         for tag in CUISINE_TAGS.get(cuisine_id, []):
@@ -192,7 +241,7 @@ async def find_stations(
                 order=Order.VOTES,
                 reverse=True,
             )
-            add(playable(stations, skip_talk=True), tag)
+            await add(playable(stations, skip_talk=True), tag)
         country = CUISINE_COUNTRY.get(cuisine_id)
         if country is not None and len(found) < limit:
             stations = await browser.stations(
@@ -203,16 +252,18 @@ async def find_stations(
                 order=Order.VOTES,
                 reverse=True,
             )
-            add(playable(stations, skip_talk=True), None)
+            await add(playable(stations, skip_talk=True), None)
         return found
     finally:
         if own:
             await browser.close()
 
 
-async def find_station(cuisine_id: str, *, browser: RadioBrowser | None = None) -> RadioStation | None:
+async def find_station(
+    cuisine_id: str, *, browser: RadioBrowser | None = None, probe: Probe | None = None
+) -> RadioStation | None:
     """The best candidate, or None when Radio Browser has nothing usable."""
-    found = await find_stations(cuisine_id, browser=browser, limit=1)
+    found = await find_stations(cuisine_id, browser=browser, limit=1, probe=probe)
     return found[0] if found else None
 
 
