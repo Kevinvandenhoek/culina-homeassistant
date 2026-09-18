@@ -14,6 +14,9 @@ from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -21,12 +24,18 @@ from homeassistant.helpers.selector import (
 
 from .api import CulinaApi, CulinaApiError, CulinaAuthError
 from .const import (
+    CONF_ANNOUNCEMENT_VOLUME,
     CONF_ANNOUNCEMENTS,
     CONF_MEDIA_PLAYER,
     CONF_MUSIC,
+    CONF_MUSIC_VOLUME,
     CONF_TOKEN,
     CONF_TTS_ENTITY,
     DOMAIN,
+)
+
+VOLUME_SELECTOR = NumberSelector(
+    NumberSelectorConfig(min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER, unit_of_measurement="%")
 )
 
 TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
@@ -114,7 +123,9 @@ class CulinaOptionsFlow(OptionsFlow):
                 data={
                     CONF_TTS_ENTITY: user_input.get(CONF_TTS_ENTITY),
                     CONF_ANNOUNCEMENTS: user_input[CONF_ANNOUNCEMENTS],
+                    CONF_ANNOUNCEMENT_VOLUME: user_input.get(CONF_ANNOUNCEMENT_VOLUME),
                     CONF_MUSIC: user_input[CONF_MUSIC],
+                    CONF_MUSIC_VOLUME: user_input.get(CONF_MUSIC_VOLUME),
                 },
             )
         schema = vol.Schema(
@@ -126,7 +137,15 @@ class CulinaOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_ANNOUNCEMENTS, default=current.get(CONF_ANNOUNCEMENTS, True)
                 ): BooleanSelector(),
+                vol.Optional(
+                    CONF_ANNOUNCEMENT_VOLUME,
+                    description={"suggested_value": current.get(CONF_ANNOUNCEMENT_VOLUME)},
+                ): VOLUME_SELECTOR,
                 vol.Required(CONF_MUSIC, default=current.get(CONF_MUSIC, True)): BooleanSelector(),
+                vol.Optional(
+                    CONF_MUSIC_VOLUME,
+                    description={"suggested_value": current.get(CONF_MUSIC_VOLUME)},
+                ): VOLUME_SELECTOR,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

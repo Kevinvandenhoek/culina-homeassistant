@@ -38,11 +38,15 @@
         "data": {
           "tts_entity": "Text-to-speech engine",
           "announcements": "Announce the steps on the speaker",
-          "music": "Play music while cooking"
+          "announcement_volume": "Announcement volume",
+          "music": "Play music while cooking",
+          "music_volume": "Music volume"
         },
         "data_description": {
           "tts_entity": "The voice for the announcements. Without one, nothing is announced.",
-          "music": "A deliberately stereotypical radio station for the cuisine of the recipe, mariachi for Mexican, picked from Radio Browser."
+          "announcement_volume": "Leave empty to use the speaker's own volume. Works on speakers that support announcements at their own volume, like Sonos.",
+          "music": "A deliberately stereotypical radio station for the cuisine of the recipe, mariachi for Mexican, picked from Radio Browser.",
+          "music_volume": "Set on the speaker when the music starts. Leave empty to keep whatever the speaker is at."
         }
       }
     }

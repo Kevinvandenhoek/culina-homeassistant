@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import Any
 
+from homeassistant.components.tts import generate_media_source_id
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -23,9 +24,11 @@ from radios import RadioBrowser
 from .api import CulinaApi, CulinaApiError, CulinaNotFoundError, CulinaSocket
 from .radio import USER_AGENT, RadioStation, find_stations, register_click, serves_mp3
 from .const import (
+    CONF_ANNOUNCEMENT_VOLUME,
     CONF_ANNOUNCEMENTS,
     CONF_MEDIA_PLAYER,
     CONF_MUSIC,
+    CONF_MUSIC_VOLUME,
     CONF_TOKEN,
     CONF_TTS_ENTITY,
     DOMAIN,
@@ -319,29 +322,37 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
     # Speaker
 
     async def _speak(self, text: str) -> None:
+        """Play the text as an announcement, the way `tts.speak` does, with
+        an optional volume for players that honour it (Sonos)."""
         tts_entity = self.entry.options.get(CONF_TTS_ENTITY)
         if not tts_entity:
             return
-        data: dict[str, Any] = {
-            "entity_id": tts_entity,
-            "media_player_entity_id": self.entry.data[CONF_MEDIA_PLAYER],
-            "message": text,
-            "cache": True,
-        }
-        if self.language:
-            data["language"] = self.language
-        try:
-            await self.hass.services.async_call("tts", "speak", data, blocking=True)
-        except HomeAssistantError as err:
-            if "language" not in data:
+        player = self.entry.data[CONF_MEDIA_PLAYER]
+        volume = self.entry.options.get(CONF_ANNOUNCEMENT_VOLUME)
+        for language in (self.language, None):
+            try:
+                media_id = generate_media_source_id(
+                    self.hass, message=text, engine=tts_entity, language=language, options=None, cache=True
+                )
+            except HomeAssistantError as err:
+                if language is not None:
+                    _LOGGER.debug("Voice %s does not speak %s: %s", tts_entity, language, err)
+                    continue
                 _LOGGER.warning("Announcement failed: %s", err)
                 return
-            _LOGGER.debug("Retrying announcement without language %s: %s", self.language, err)
-            data.pop("language")
+            data: dict[str, Any] = {
+                "entity_id": player,
+                "media_content_id": media_id,
+                "media_content_type": "music",
+                "announce": True,
+            }
+            if volume is not None:
+                data["extra"] = {"volume": int(volume)}
             try:
-                await self.hass.services.async_call("tts", "speak", data, blocking=True)
-            except HomeAssistantError as retry_err:
-                _LOGGER.warning("Announcement failed: %s", retry_err)
+                await self.hass.services.async_call("media_player", "play_media", data, blocking=True)
+            except HomeAssistantError as err:
+                _LOGGER.warning("Announcement failed: %s", err)
+            return
 
     async def _start_music(self) -> None:
         """A radio station for the cuisine, the same for every household."""
@@ -365,6 +376,17 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         # skipped for the next candidate.
         via_media_source = "radio_browser" in self.hass.config.components
         http = async_get_clientsession(self.hass)
+        volume = self.entry.options.get(CONF_MUSIC_VOLUME)
+        if volume is not None:
+            try:
+                await self.hass.services.async_call(
+                    "media_player",
+                    "volume_set",
+                    {"entity_id": player, "volume_level": int(volume) / 100},
+                    blocking=True,
+                )
+            except HomeAssistantError as err:
+                _LOGGER.warning("Could not set the volume of %s: %s", player, err)
         for station in random.sample(stations, len(stations)):
             if not await serves_mp3(http, station.url):
                 _LOGGER.debug("Skipping %s: the stream is not MP3", station.name)

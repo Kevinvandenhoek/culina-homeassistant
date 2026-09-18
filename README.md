@@ -28,6 +28,10 @@ Open the integration and click **Configure**.
   supports. The announcement is played as an announcement, so speakers that support it, like
   Sonos, play it over the music and resume afterwards.
 - **Announce the steps** and **Play music**: on or off.
+- **Announcement volume** and **Music volume**: optional. The music volume is set on the speaker
+  when the music starts, so cooking always sounds the same. The announcement volume only works on
+  speakers that play announcements at their own level, like Sonos; elsewhere the speaker's volume
+  is used.
 
 ## The music
 
