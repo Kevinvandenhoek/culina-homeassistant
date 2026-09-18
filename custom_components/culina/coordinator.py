@@ -17,8 +17,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
+from radios import RadioBrowser
 
 from .api import CulinaApi, CulinaApiError, CulinaNotFoundError, CulinaSocket
+from .radio import USER_AGENT, RadioStation, find_station, register_click
 from .const import (
     CONF_ANNOUNCEMENTS,
     CONF_CUISINE_MEDIA,
@@ -90,6 +92,8 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._recipe_retries = 0
         self._music_started = False
         self._lock = asyncio.Lock()
+        self._radio = RadioBrowser(user_agent=USER_AGENT, session=async_get_clientsession(hass))
+        self._stations: dict[str, RadioStation | None] = {}
         self._socket = CulinaSocket(
             entry.data[CONF_TOKEN],
             on_connect=self._on_connect,
@@ -311,11 +315,22 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
                 _LOGGER.warning("Announcement failed: %s", retry_err)
 
     async def _start_music(self) -> None:
+        """A mapping from the options wins; otherwise a radio station for the cuisine."""
         if not self.entry.options.get(CONF_MUSIC, True) or self.recipe is None:
             return
-        media = (self.entry.options.get(CONF_CUISINE_MEDIA) or {}).get(self.recipe.cuisine_id or "")
-        if not media:
-            return
+        cuisine_id = self.recipe.cuisine_id
+        media = (self.entry.options.get(CONF_CUISINE_MEDIA) or {}).get(cuisine_id or "")
+        station: RadioStation | None = None
+        if media:
+            content_id, content_type = media["media_content_id"], media["media_content_type"]
+            what = f"mapped media for {cuisine_id}"
+        else:
+            station = await self._radio_station(cuisine_id)
+            if station is None:
+                _LOGGER.info("No music for cuisine %s", cuisine_id)
+                return
+            content_id, content_type = station.url, "music"
+            what = f"radio station {station.name}"
         player = self.entry.data[CONF_MEDIA_PLAYER]
         try:
             await self.hass.services.async_call(
@@ -323,21 +338,36 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
                 "play_media",
                 {
                     "entity_id": player,
-                    "media_content_id": media["media_content_id"],
-                    "media_content_type": media["media_content_type"],
+                    "media_content_id": content_id,
+                    "media_content_type": content_type,
                 },
                 blocking=True,
             )
         except HomeAssistantError as err:
-            _LOGGER.warning("Could not start music for %s: %s", self.recipe.cuisine_id, err)
+            _LOGGER.warning("Could not play %s on %s: %s", what, player, err)
             return
+        _LOGGER.info("Playing %s on %s", what, player)
         self._music_started = True
+        if station is not None:
+            await register_click(station, browser=self._radio)
+            return
         try:
             await self.hass.services.async_call(
                 "media_player", "repeat_set", {"entity_id": player, "repeat": "all"}, blocking=True
             )
         except HomeAssistantError as err:
             _LOGGER.debug("Speaker %s does not repeat: %s", player, err)
+
+    async def _radio_station(self, cuisine_id: str | None) -> RadioStation | None:
+        if not cuisine_id:
+            return None
+        if cuisine_id not in self._stations:
+            try:
+                self._stations[cuisine_id] = await find_station(cuisine_id, browser=self._radio)
+            except Exception as err:  # noqa: BLE001 - Radio Browser is best effort
+                _LOGGER.warning("Radio Browser lookup for %s failed: %s", cuisine_id, err)
+                return None
+        return self._stations[cuisine_id]
 
     async def _stop_music(self) -> None:
         player = self.entry.data[CONF_MEDIA_PLAYER]

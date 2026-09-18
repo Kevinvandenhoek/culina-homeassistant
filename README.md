@@ -28,14 +28,20 @@ Open the integration and click **Configure**.
   engine works; Google Translate is built into Home Assistant and speaks every language Culina
   supports. The announcement is played as an announcement, so speakers that support it, like
   Sonos, play it over the music and resume afterwards.
-- **Add music for a cuisine**: pick a cuisine and what to play, from anything your speaker can
-  play: a favorite, a playlist, a radio station or a file. It repeats until cooking stops. Cuisines
-  without music stay silent.
+- **Choose your own music for a cuisine**: pick a cuisine and what to play, from anything your
+  speaker can play: a favorite, a playlist, a radio station or a file. It repeats until cooking
+  stops and replaces the automatic radio station for that cuisine.
 - **Save** writes the options and reconnects.
+
+Music works without any setup. For every cuisine the integration picks an internet radio station
+from [Radio Browser](https://www.radio-browser.info): first a deliberately stereotypical one,
+mariachi for Mexican, fado for Portuguese, schlager for German, and when no such station exists,
+the best voted music station of the country. It is meant as a joke, not as a playlist. If you
+want something else for a cuisine, choose your own music in the options.
 
 ## What it does
 
-- **Start**: music for the cuisine starts on the speaker, if you mapped one.
+- **Start**: music for the cuisine starts on the speaker.
 - **While cooking**: one minute before a step ends, "step is almost done" (only for steps longer
   than two minutes). When a step ends, "step is done" or "step is done, next up ..." when another
   step starts at that moment. When the last step ends, "all done". Culina schedules steps in

@@ -37,8 +37,8 @@
         "title": "Culina",
         "menu_options": {
           "settings": "Announcements and music",
-          "add_music": "Add music for a cuisine",
-          "remove_music": "Remove music for a cuisine",
+          "add_music": "Choose your own music for a cuisine",
+          "remove_music": "Back to the radio station for a cuisine",
           "done": "Save"
         }
       },
@@ -54,17 +54,17 @@
         }
       },
       "add_music": {
-        "title": "Music for a cuisine",
+        "title": "Your own music for a cuisine",
         "data": {
           "cuisine": "Cuisine",
           "media": "What to play"
         },
         "data_description": {
-          "media": "Anything the speaker can play: a favorite, a playlist, a radio station or a file. It repeats until cooking stops."
+          "media": "Anything the speaker can play: a favorite, a playlist, a radio station or a file. It repeats until cooking stops and replaces the automatic radio station for this cuisine."
         }
       },
       "remove_music": {
-        "title": "Remove music",
+        "title": "Back to the radio station",
         "data": {
           "cuisines": "Cuisines"
         }
