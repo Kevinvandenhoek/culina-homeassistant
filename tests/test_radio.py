@@ -12,7 +12,7 @@ from radio import CUISINE_COUNTRY, CUISINE_TAGS, first_playable  # noqa: E402
 
 
 def station(**kwargs):
-    base = dict(url_resolved="http://x", hls=False, codec="MP3", tags=[])
+    base = dict(url="http://x", url_resolved="http://x", hls=False, codec="MP3", tags=[])
     return SimpleNamespace(**{**base, **kwargs})
 
 
@@ -36,6 +36,7 @@ class PlayableTest(unittest.TestCase):
 
     def test_skips_mms(self):
         self.assertIsNone(first_playable([station(url_resolved="mms://x")]))
+        self.assertIsNone(first_playable([station(url="mms://x")]))
 
     def test_none_when_nothing_fits(self):
         self.assertIsNone(first_playable([station(hls=True)]))

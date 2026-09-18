@@ -138,9 +138,9 @@ def playable(stations: list[Station], *, skip_talk: bool = False) -> list[Statio
     """The stations a plain media player can stream, best voted first."""
     result = []
     for station in stations:
-        url = station.url_resolved or ""
-        if not url.startswith(("http://", "https://")) or station.hls:
-            continue  # mms:// and HLS streams fail on Sonos with UPnP 701
+        urls = (station.url or "", station.url_resolved or "")
+        if not all(url.startswith(("http://", "https://")) for url in urls) or station.hls:
+            continue  # mms:// and HLS streams fail on Sonos with UPnP 701; the media source plays `url`
         if station.codec and station.codec.upper() not in PLAYABLE_CODECS:
             continue
         if skip_talk and _tags(station) & TALK_TAGS:
