@@ -33,9 +33,10 @@ Open the integration and click **Configure**.
   speakers that play announcements at their own level, like Sonos; elsewhere the speaker's volume
   is used.
 
-The same settings are also entities on the Culina device, for dashboards and automations:
-`switch.culina_announcements`, `switch.culina_music`, `number.culina_announcement_volume` and
-`number.culina_music_volume`.
+The same settings are also entities on the Culina device, for dashboards and automations: the
+switches **Announcements** and **Music**, and the sliders **Announcement volume** and **Music
+volume**. Home Assistant names them `switch.culina_announcements` and so on, with the area in
+front when the device is in one.
 
 ## The music
 

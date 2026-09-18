@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import Entity
 
@@ -38,8 +38,8 @@ class CulinaEntity(Entity):
         # Options can also change through the options flow: refresh then too.
         self.async_on_remove(self.entry.add_update_listener(self._async_entry_updated))
 
-    @callback
-    def _async_entry_updated(self, hass: Any, entry: CulinaConfigEntry) -> None:
+    async def _async_entry_updated(self, hass: HomeAssistant, entry: CulinaConfigEntry) -> None:
+        """Update listeners are awaited by Home Assistant, so this must be a coroutine."""
         self.async_write_ha_state()
 
     def update_option(self, option: str, value: Any) -> None:
