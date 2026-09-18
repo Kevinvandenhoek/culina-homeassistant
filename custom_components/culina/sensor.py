@@ -6,13 +6,13 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import CulinaConfigEntry
-from .const import DOMAIN, STATE_COOKING, STATE_IDLE, STATE_PAUSED
+from .const import STATE_COOKING, STATE_IDLE, STATE_PAUSED
 from .coordinator import CulinaCoordinator
+from .entity import device_info
 
 
 async def async_setup_entry(
@@ -32,13 +32,7 @@ class CulinaCookingSensor(CoordinatorEntity[CulinaCoordinator], SensorEntity):
     def __init__(self, coordinator: CulinaCoordinator, entry: CulinaConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_cooking_session"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Culina",
-            manufacturer="Culina",
-            entry_type=DeviceEntryType.SERVICE,
-            configuration_url="https://culina.cloud",
-        )
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> str:

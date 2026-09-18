@@ -33,6 +33,10 @@ Open the integration and click **Configure**.
   speakers that play announcements at their own level, like Sonos; elsewhere the speaker's volume
   is used.
 
+The same settings are also entities on the Culina device, for dashboards and automations:
+`switch.culina_announcements`, `switch.culina_music`, `number.culina_announcement_volume` and
+`number.culina_music_volume`.
+
 ## The music
 
 The music is the same for every household and there is nothing to set up. For every cuisine the

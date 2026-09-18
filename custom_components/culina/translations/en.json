@@ -61,6 +61,22 @@
           "paused": "Paused"
         }
       }
+    },
+    "switch": {
+      "announcements": {
+        "name": "Announcements"
+      },
+      "music": {
+        "name": "Music"
+      }
+    },
+    "number": {
+      "announcement_volume": {
+        "name": "Announcement volume"
+      },
+      "music_volume": {
+        "name": "Music volume"
+      }
     }
   }
 }

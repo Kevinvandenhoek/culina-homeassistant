@@ -16,7 +16,7 @@ from .coordinator import CulinaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
 RADIO_BROWSER = "radio_browser"
 
 type CulinaConfigEntry = ConfigEntry[CulinaCoordinator]
@@ -55,7 +55,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CulinaConfigEntry) -> bo
         await coordinator.async_shutdown()
         raise ConfigEntryNotReady(f"Culina is not reachable: {err}") from err
     entry.runtime_data = coordinator
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    # Options are read when they are used, so a change needs no reload; a
+    # reload would re-announce the current step in the middle of cooking.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -65,7 +66,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: CulinaConfigEntry) -> b
     if unloaded:
         await entry.runtime_data.async_shutdown()
     return unloaded
-
-
-async def _async_options_updated(hass: HomeAssistant, entry: CulinaConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
