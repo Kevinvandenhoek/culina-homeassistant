@@ -8,7 +8,6 @@ CONF_MEDIA_PLAYER = "media_player"
 CONF_TTS_ENTITY = "tts_entity"
 CONF_ANNOUNCEMENTS = "announcements"
 CONF_MUSIC = "music"
-CONF_CUISINE_MEDIA = "cuisine_media"
 
 # "Step is almost done" fires this many seconds before the end of a step,
 # and only for steps longer than ENDING_SOON_MIN_DURATION, otherwise it

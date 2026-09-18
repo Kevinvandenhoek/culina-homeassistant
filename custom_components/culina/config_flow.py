@@ -14,11 +14,6 @@ from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
-    MediaSelector,
-    SelectOptionDict,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -27,20 +22,14 @@ from homeassistant.helpers.selector import (
 from .api import CulinaApi, CulinaApiError, CulinaAuthError
 from .const import (
     CONF_ANNOUNCEMENTS,
-    CONF_CUISINE_MEDIA,
     CONF_MEDIA_PLAYER,
     CONF_MUSIC,
     CONF_TOKEN,
     CONF_TTS_ENTITY,
     DOMAIN,
 )
-from .cuisines import CUISINES
 
 TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
-CUISINE_OPTIONS = [
-    SelectOptionDict(value=cuisine_id, label=name)
-    for cuisine_id, name in sorted(CUISINES.items(), key=lambda item: item[1])
-]
 
 
 async def _validate_token(hass, token: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -72,7 +61,7 @@ class CulinaConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title=household.get("name") or "Culina",
                     data={CONF_TOKEN: token, CONF_MEDIA_PLAYER: user_input[CONF_MEDIA_PLAYER]},
-                    options={CONF_ANNOUNCEMENTS: True, CONF_MUSIC: True, CONF_CUISINE_MEDIA: {}},
+                    options={CONF_ANNOUNCEMENTS: True, CONF_MUSIC: True},
                 )
         schema = vol.Schema(
             {
@@ -115,89 +104,29 @@ class CulinaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class CulinaOptionsFlow(OptionsFlow):
-    """A menu that loops until Save, so several cuisines can be added in one go."""
-
-    def __init__(self) -> None:
-        self._options: dict[str, Any] | None = None
-
-    @property
-    def options(self) -> dict[str, Any]:
-        if self._options is None:
-            current = self.config_entry.options
-            self._options = {
-                **current,
-                CONF_CUISINE_MEDIA: dict(current.get(CONF_CUISINE_MEDIA) or {}),
-            }
-        return self._options
+    """One form: the voice, and announcements and music on or off."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        menu = ["settings", "add_music"]
-        if self.options[CONF_CUISINE_MEDIA]:
-            menu.append("remove_music")
-        menu.append("done")
-        return self.async_show_menu(step_id="init", menu_options=menu)
-
-    async def async_step_settings(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+        current = self.config_entry.options
         if user_input is not None:
-            self.options[CONF_TTS_ENTITY] = user_input.get(CONF_TTS_ENTITY)
-            self.options[CONF_ANNOUNCEMENTS] = user_input[CONF_ANNOUNCEMENTS]
-            self.options[CONF_MUSIC] = user_input[CONF_MUSIC]
-            return await self.async_step_init()
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_TTS_ENTITY: user_input.get(CONF_TTS_ENTITY),
+                    CONF_ANNOUNCEMENTS: user_input[CONF_ANNOUNCEMENTS],
+                    CONF_MUSIC: user_input[CONF_MUSIC],
+                },
+            )
         schema = vol.Schema(
             {
                 vol.Optional(
                     CONF_TTS_ENTITY,
-                    description={"suggested_value": self.options.get(CONF_TTS_ENTITY)},
+                    description={"suggested_value": current.get(CONF_TTS_ENTITY)},
                 ): EntitySelector(EntitySelectorConfig(domain="tts")),
                 vol.Required(
-                    CONF_ANNOUNCEMENTS, default=self.options.get(CONF_ANNOUNCEMENTS, True)
+                    CONF_ANNOUNCEMENTS, default=current.get(CONF_ANNOUNCEMENTS, True)
                 ): BooleanSelector(),
-                vol.Required(CONF_MUSIC, default=self.options.get(CONF_MUSIC, True)): BooleanSelector(),
+                vol.Required(CONF_MUSIC, default=current.get(CONF_MUSIC, True)): BooleanSelector(),
             }
         )
-        return self.async_show_form(step_id="settings", data_schema=schema)
-
-    async def async_step_add_music(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            media = user_input["media"]
-            self.options[CONF_CUISINE_MEDIA][user_input["cuisine"]] = {
-                "media_content_id": media["media_content_id"],
-                "media_content_type": media["media_content_type"],
-            }
-            return await self.async_step_init()
-        schema = vol.Schema(
-            {
-                vol.Required("cuisine"): SelectSelector(
-                    SelectSelectorConfig(options=CUISINE_OPTIONS, mode=SelectSelectorMode.DROPDOWN)
-                ),
-                vol.Required("media"): MediaSelector(),
-            }
-        )
-        return self.async_show_form(step_id="add_music", data_schema=schema)
-
-    async def async_step_remove_music(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            for cuisine_id in user_input["cuisines"]:
-                self.options[CONF_CUISINE_MEDIA].pop(cuisine_id, None)
-            return await self.async_step_init()
-        options = [
-            SelectOptionDict(value=cuisine_id, label=CUISINES.get(cuisine_id, cuisine_id))
-            for cuisine_id in sorted(self.options[CONF_CUISINE_MEDIA])
-        ]
-        schema = vol.Schema(
-            {
-                vol.Required("cuisines"): SelectSelector(
-                    SelectSelectorConfig(options=options, multiple=True, mode=SelectSelectorMode.LIST)
-                )
-            }
-        )
-        return self.async_show_form(step_id="remove_music", data_schema=schema)
-
-    async def async_step_done(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        return self.async_create_entry(title="", data=self.options)
+        return self.async_show_form(step_id="init", data_schema=schema)

@@ -35,38 +35,14 @@
     "step": {
       "init": {
         "title": "Culina",
-        "menu_options": {
-          "settings": "Announcements and music",
-          "add_music": "Choose your own music for a cuisine",
-          "remove_music": "Back to the radio station for a cuisine",
-          "done": "Save"
-        }
-      },
-      "settings": {
-        "title": "Announcements and music",
         "data": {
           "tts_entity": "Text-to-speech engine",
           "announcements": "Announce the steps on the speaker",
           "music": "Play music while cooking"
         },
         "data_description": {
-          "tts_entity": "The voice for the announcements. Without one, nothing is announced."
-        }
-      },
-      "add_music": {
-        "title": "Your own music for a cuisine",
-        "data": {
-          "cuisine": "Cuisine",
-          "media": "What to play"
-        },
-        "data_description": {
-          "media": "Anything the speaker can play: a favorite, a playlist, a radio station or a file. It repeats until cooking stops and replaces the automatic radio station for this cuisine."
-        }
-      },
-      "remove_music": {
-        "title": "Back to the radio station",
-        "data": {
-          "cuisines": "Cuisines"
+          "tts_entity": "The voice for the announcements. Without one, nothing is announced.",
+          "music": "A deliberately stereotypical radio station for the cuisine of the recipe, mariachi for Mexican, picked from Radio Browser."
         }
       }
     }

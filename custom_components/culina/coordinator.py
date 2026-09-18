@@ -23,7 +23,6 @@ from .api import CulinaApi, CulinaApiError, CulinaNotFoundError, CulinaSocket
 from .radio import USER_AGENT, RadioStation, find_stations, register_click
 from .const import (
     CONF_ANNOUNCEMENTS,
-    CONF_CUISINE_MEDIA,
     CONF_MEDIA_PLAYER,
     CONF_MUSIC,
     CONF_TOKEN,
@@ -324,29 +323,18 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
                 _LOGGER.warning("Announcement failed: %s", retry_err)
 
     async def _start_music(self) -> None:
-        """A mapping from the options wins; otherwise a radio station for the cuisine."""
+        """A radio station for the cuisine, the same for every household."""
         if not self.entry.options.get(CONF_MUSIC, True) or self.recipe is None:
             return
         if self._music_tried_for == self.recipe.id:
             return  # one attempt per recipe, a seek must not retry a failing stream
         self._music_tried_for = self.recipe.id
         cuisine_id = self.recipe.cuisine_id
-        media = (self.entry.options.get(CONF_CUISINE_MEDIA) or {}).get(cuisine_id or "")
-        player = self.entry.data[CONF_MEDIA_PLAYER]
-        if media:
-            if await self._play(player, media["media_content_id"], media["media_content_type"], f"mapped media for {cuisine_id}"):
-                self._music_started = True
-                try:
-                    await self.hass.services.async_call(
-                        "media_player", "repeat_set", {"entity_id": player, "repeat": "all"}, blocking=True
-                    )
-                except HomeAssistantError as err:
-                    _LOGGER.debug("Speaker %s does not repeat: %s", player, err)
-            return
         stations = await self._radio_stations(cuisine_id)
         if not stations:
             _LOGGER.info("No music for cuisine %s", cuisine_id)
             return
+        player = self.entry.data[CONF_MEDIA_PLAYER]
         # Through the Radio Browser media source when it is set up: Sonos then
         # treats the stream as radio instead of a file. The bare URL is the
         # fallback for players without it. A station the speaker refuses is
@@ -396,12 +384,6 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
 
     async def _stop_music(self) -> None:
         player = self.entry.data[CONF_MEDIA_PLAYER]
-        try:
-            await self.hass.services.async_call(
-                "media_player", "repeat_set", {"entity_id": player, "repeat": "off"}, blocking=True
-            )
-        except HomeAssistantError:
-            pass
         try:
             await self.hass.services.async_call(
                 "media_player", "media_stop", {"entity_id": player}, blocking=True

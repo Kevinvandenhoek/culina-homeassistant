@@ -23,33 +23,30 @@ integration's options.
 
 Open the integration and click **Configure**.
 
-- **Announcements and music**: choose a text-to-speech engine for the announcements, and switch
-  announcements and music on or off. Without a text-to-speech engine nothing is announced. Any
-  engine works; Google Translate is built into Home Assistant and speaks every language Culina
+- **Text-to-speech engine**: the voice for the announcements. Without one nothing is announced.
+  Any engine works; Google Translate is built into Home Assistant and speaks every language Culina
   supports. The announcement is played as an announcement, so speakers that support it, like
   Sonos, play it over the music and resume afterwards.
-- **Choose your own music for a cuisine**: pick a cuisine and what to play, from anything your
-  speaker can play: a favorite, a playlist, a radio station or a file. It repeats until cooking
-  stops and replaces the automatic radio station for that cuisine.
-- **Save** writes the options and reconnects.
+- **Announce the steps** and **Play music**: on or off.
 
-Music works without any setup. For every cuisine the integration picks an internet radio station
-from [Radio Browser](https://www.radio-browser.info): first a deliberately stereotypical one,
-mariachi for Mexican, fado for Portuguese, schlager for German, and when no such station exists,
-the best voted music station of the country. It is meant as a joke, not as a playlist. If you
-want something else for a cuisine, choose your own music in the options.
+## The music
 
-The tags per cuisine and the country codes live in
-[`custom_components/culina/radio.py`](custom_components/culina/radio.py). Which station a tag
-resolves to depends on the votes on Radio Browser, so it can change over time.
+The music is the same for every household and there is nothing to set up. For every cuisine the
+integration picks an internet radio station from [Radio Browser](https://www.radio-browser.info),
+deliberately the cliché: mariachi for Mexican, fado for Portuguese, oktoberfest for German, pirate
+hits for Dutch, arabesk for Turkish, liscio for Italian. It is meant as a joke, not as a playlist.
+The tags per cuisine live in
+[`custom_components/culina/radio.py`](custom_components/culina/radio.py); every tag was checked
+to return a working station, and cuisines without a usable tag get the best voted music station
+of the country. Which station a tag resolves to depends on the votes on Radio Browser, so it can
+change over time.
 
-Sonos only accepts these streams through Home Assistant's own **Radio Browser** integration, so add
-it once under Settings, Devices & services (it needs no setup). Other players play the stream
-directly.
+The stations play through Home Assistant's own **Radio Browser** integration, which the Culina
+integration adds for you when it is missing. Sonos only accepts the streams that way.
 
 ## What it does
 
-- **Start**: music for the cuisine starts on the speaker.
+- **Start**: the radio station for the cuisine starts on the speaker.
 - **While cooking**: one minute before a step ends, "step is almost done" (only for steps longer
   than two minutes). When a step ends, "step is done" or "step is done, next up ..." when another
   step starts at that moment. When the last step ends, "all done". Culina schedules steps in
