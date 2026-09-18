@@ -42,6 +42,9 @@ class PlayableTest(unittest.TestCase):
         self.assertIsNone(first_playable([station(url_resolved="mms://x")]))
         self.assertIsNone(first_playable([station(url="mms://x")]))
 
+    def test_talk_matches_fragments(self):
+        self.assertIsNone(first_playable([station(tags=["talk news"]), station(tags=["islamic"])], skip_talk=True))
+
     def test_none_when_nothing_fits(self):
         self.assertIsNone(first_playable([station(hls=True)]))
 

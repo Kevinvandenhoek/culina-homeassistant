@@ -18,8 +18,9 @@ _LOGGER = logging.getLogger(__name__)
 
 USER_AGENT = "culina-homeassistant"
 
-# Tags that mean talk rather than music, skipped in the country fallback.
-TALK_TAGS = {"news", "talk", "news talk", "sport", "sports", "religion", "religious", "christian", "gospel", "public radio"}
+# Tag fragments that mean talk or worship rather than music. Matched as
+# substrings: Radio Browser has "talk news", "local news", "islamic" and so on.
+TALK_TAGS = ("news", "talk", "sport", "relig", "christ", "cristian", "evangel", "gospel", "islam", "quran", "koran", "public radio")
 PLAYABLE_CODECS = {"MP3", "AAC", "AAC+"}
 
 # cuisine id -> ISO 3166-1 country code
@@ -69,8 +70,8 @@ CUISINE_TAGS: dict[str, list[str]] = {
     "brazilian": ["bossa nova", "samba", "mpb"],
     "argentine": ["tango"],
     "colombian": ["vallenato", "cumbia"],
-    "peruvian": ["andean", "peruvian"],
-    "chilean": ["chilean", "cueca"],
+    "peruvian": ["cumbia peruana", "chicha", "peru"],
+    "chilean": ["chile", "cueca"],
     "japanese": ["enka", "j-pop"],
     "korean": ["trot", "k-pop"],
     "chinese": ["chinese traditional", "c-pop", "mandopop"],
@@ -90,13 +91,13 @@ CUISINE_TAGS: dict[str, list[str]] = {
     "bangladeshi": ["bangla", "bengali"],
     "sri_lankan": ["sinhala", "sri lanka"],
     "nepalese": ["nepali"],
-    "afghan": ["afghan", "dari", "pashto"],
+    "afghan": ["afghan", "dari", "pashto", "persian pop"],
     "persian": ["persian pop", "iranian music", "persian"],
     "israeli": ["mizrahi", "israeli", "hebrew"],
-    "lebanese": ["arabic oldies", "lebanese", "arabic"],
-    "egyptian": ["egyptian", "arabic oldies", "arabic"],
+    "lebanese": ["lebanese", "arabic music", "arabic"],
+    "egyptian": ["egyptian", "arabic music", "arabic"],
     "moroccan": ["chaabi", "moroccan", "arabic"],
-    "tunisian": ["tunisian", "arabic"],
+    "tunisian": ["tunisian", "maghreb", "arabic music", "arabic"],
     "georgian": ["georgian"],
     "russian": ["russian folk", "russian chanson", "russian"],
     "ukrainian": ["ukrainian folk", "ukrainian"],
@@ -134,6 +135,10 @@ def _tags(station: Station) -> set[str]:
     return {tag.strip().lower() for tag in raw or [] if tag}
 
 
+def _is_talk(station: Station) -> bool:
+    return any(fragment in tag for tag in _tags(station) for fragment in TALK_TAGS)
+
+
 def playable(stations: list[Station], *, skip_talk: bool = False) -> list[Station]:
     """The stations a plain media player can stream, best voted first."""
     result = []
@@ -143,7 +148,7 @@ def playable(stations: list[Station], *, skip_talk: bool = False) -> list[Statio
             continue  # mms:// and HLS streams fail on Sonos with UPnP 701; the media source plays `url`
         if station.codec and station.codec.upper() not in PLAYABLE_CODECS:
             continue
-        if skip_talk and _tags(station) & TALK_TAGS:
+        if skip_talk and _is_talk(station):
             continue
         result.append(station)
     # MP3 first: Sonos refused an AAC+ stream over https (UPnP 701) that Radio
