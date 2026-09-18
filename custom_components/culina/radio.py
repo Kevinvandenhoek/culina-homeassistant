@@ -146,6 +146,9 @@ def playable(stations: list[Station], *, skip_talk: bool = False) -> list[Statio
         if skip_talk and _tags(station) & TALK_TAGS:
             continue
         result.append(station)
+    # MP3 first: Sonos refused an AAC+ stream over https (UPnP 701) that Radio
+    # Browser marked as working. Stable, so votes still decide within a codec.
+    result.sort(key=lambda station: (station.codec or "").upper() != "MP3")
     return result
 
 

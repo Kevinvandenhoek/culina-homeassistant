@@ -34,6 +34,10 @@ class PlayableTest(unittest.TestCase):
         self.assertEqual(first_playable(stations).tags, ["news", "public radio"])
         self.assertEqual(first_playable(stations, skip_talk=True).tags, "pop, hits")
 
+    def test_mp3_before_aac(self):
+        picked = first_playable([station(codec="AAC+", tags=["a"]), station(codec="MP3", tags=["b"])])
+        self.assertEqual(picked.tags, ["b"])
+
     def test_skips_mms(self):
         self.assertIsNone(first_playable([station(url_resolved="mms://x")]))
         self.assertIsNone(first_playable([station(url="mms://x")]))
