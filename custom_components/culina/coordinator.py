@@ -186,10 +186,12 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
             self._start_announced_for = None
         if recipe_changed or self.recipe is None or self.recipe.id != new.recipe_id:
             await self._load_recipe(new.recipe_id)
-        if not new.paused and not self._music_started:
-            await self._start_music()
         self._reschedule()
         self._publish()
+        if not new.paused and not self._music_started:
+            # In the background: finding and probing a station takes seconds,
+            # and the cook should hear the step right away.
+            self.entry.async_create_background_task(self.hass, self._start_music(), "culina_music")
         if not new.paused and self.recipe is not None and self._start_announced_for != self.recipe.id:
             # Session start, also after a reconnect: say which steps are on now.
             self._start_announced_for = self.recipe.id
@@ -347,9 +349,12 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
             return
         if self._music_tried_for == self.recipe.id:
             return  # one attempt per recipe, a seek must not retry a failing stream
-        self._music_tried_for = self.recipe.id
-        cuisine_id = self.recipe.cuisine_id
+        recipe = self.recipe
+        self._music_tried_for = recipe.id
+        cuisine_id = recipe.cuisine_id
         stations = await self._radio_stations(cuisine_id)
+        if self._closed or self.session is None or self.recipe is not recipe:
+            return  # the session ended or changed while we were looking
         if not stations:
             _LOGGER.info("No music for cuisine %s", cuisine_id)
             return
@@ -364,6 +369,8 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
             if not await serves_mp3(http, station.url):
                 _LOGGER.debug("Skipping %s: the stream is not MP3", station.name)
                 continue
+            if self._closed or self.session is None or self.recipe is not recipe:
+                return
             what = f"radio station {station.name}"
             candidates = []
             if via_media_source:
