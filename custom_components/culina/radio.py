@@ -19,7 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 USER_AGENT = "culina-homeassistant"
 
 # Tags that mean talk rather than music, skipped in the country fallback.
-TALK_TAGS = {"news", "talk", "news talk", "sport", "sports", "religion", "religious", "christian"}
+TALK_TAGS = {"news", "talk", "news talk", "sport", "sports", "religion", "religious", "christian", "gospel", "public radio"}
 PLAYABLE_CODECS = {"MP3", "AAC", "AAC+"}
 
 # cuisine id -> ISO 3166-1 country code
@@ -46,7 +46,7 @@ CUISINE_COUNTRY: dict[str, str] = {
 CUISINE_TAGS: dict[str, list[str]] = {
     "mexican": ["mariachi", "ranchera"],
     "italian": ["canzone italiana", "italian oldies", "italian music"],
-    "french": ["chanson", "chanson française", "french oldies"],
+    "french": ["chanson française", "french chanson", "variété française", "french oldies"],
     "spanish": ["flamenco", "rumba"],
     "portuguese": ["fado"],
     "greek": ["greek folk", "laika", "greek music"],
@@ -70,7 +70,7 @@ CUISINE_TAGS: dict[str, list[str]] = {
     "argentine": ["tango"],
     "colombian": ["vallenato", "cumbia"],
     "peruvian": ["andean", "peruvian"],
-    "chilean": ["cueca", "chilean"],
+    "chilean": ["chilean", "cueca"],
     "japanese": ["enka", "j-pop"],
     "korean": ["trot", "k-pop"],
     "chinese": ["chinese traditional", "c-pop", "mandopop"],
@@ -90,8 +90,8 @@ CUISINE_TAGS: dict[str, list[str]] = {
     "bangladeshi": ["bangla", "bengali"],
     "sri_lankan": ["sinhala", "sri lanka"],
     "nepalese": ["nepali"],
-    "afghan": ["afghan", "dari"],
-    "persian": ["persian", "farsi"],
+    "afghan": ["afghan", "dari", "pashto"],
+    "persian": ["persian pop", "iranian music", "persian"],
     "israeli": ["mizrahi", "israeli", "hebrew"],
     "lebanese": ["arabic oldies", "lebanese", "arabic"],
     "egyptian": ["egyptian", "arabic oldies", "arabic"],
@@ -161,7 +161,7 @@ async def find_station(cuisine_id: str, *, browser: RadioBrowser | None = None) 
                 order=Order.VOTES,
                 reverse=True,
             )
-            station = first_playable(stations)
+            station = first_playable(stations, skip_talk=True)
             if station is not None:
                 return RadioStation(station.uuid, station.name, station.url_resolved, station.country_code, tag)
         country = CUISINE_COUNTRY.get(cuisine_id)
