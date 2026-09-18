@@ -39,6 +39,10 @@ mariachi for Mexican, fado for Portuguese, schlager for German, and when no such
 the best voted music station of the country. It is meant as a joke, not as a playlist. If you
 want something else for a cuisine, choose your own music in the options.
 
+The tags per cuisine and the country codes live in
+[`custom_components/culina/radio.py`](custom_components/culina/radio.py). Which station a tag
+resolves to depends on the votes on Radio Browser, so it can change over time.
+
 Sonos only accepts these streams through Home Assistant's own **Radio Browser** integration, so add
 it once under Settings, Devices & services (it needs no setup). Other players play the stream
 directly.
