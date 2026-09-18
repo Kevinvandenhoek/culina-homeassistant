@@ -95,6 +95,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._radio = RadioBrowser(user_agent=USER_AGENT, session=async_get_clientsession(hass))
         self._stations: dict[str, RadioStation | None] = {}
         self._music_tried_for: str | None = None
+        self._closed = False
         self._socket = CulinaSocket(
             entry.data[CONF_TOKEN],
             on_connect=self._on_connect,
@@ -112,6 +113,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         await self._socket.connect()
 
     async def async_shutdown(self) -> None:
+        self._closed = True
         self._cancel_timers()
         self._cancel_recipe_retry()
         await self._socket.disconnect()
@@ -133,6 +135,8 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._apply_server_now(data.get("serverNow"))
         sessions = data.get("sessions") or []
         async with self._lock:
+            if self._closed:
+                return  # a slow lookup must not play music after unload
             current = self._pick(sessions)
             if current is None:
                 if self.session is not None:
@@ -145,6 +149,8 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         session = payload.get("session")
         recipe_id = payload.get("recipeId")
         async with self._lock:
+            if self._closed:
+                return
             if session is None:
                 if self.session is None or (recipe_id and self.session.recipe_id != recipe_id):
                     return
