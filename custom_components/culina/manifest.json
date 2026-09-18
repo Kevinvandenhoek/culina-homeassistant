@@ -14,7 +14,7 @@
     "python-socketio[asyncio-client]==5.17.0",
     "radios==0.3.2"
   ],
-  "version": "0.1.0",
+  "version": "0.2.0",
   "after_dependencies": [
     "radio_browser"
   ]
