@@ -1,0 +1,86 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Culina",
+        "description": "Create a household token on culina.cloud: profile page, Integrations, Create token. It is shown once.",
+        "data": {
+          "token": "Household token",
+          "media_player": "Speaker"
+        },
+        "data_description": {
+          "token": "Starts with chb_",
+          "media_player": "The speaker that plays the music and the announcements, usually the one in the kitchen"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to Culina",
+        "description": "Culina no longer accepts the token. Create a new one on culina.cloud and paste it here.",
+        "data": {
+          "token": "Household token"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Culina did not accept this token",
+      "cannot_connect": "Could not reach Culina"
+    },
+    "abort": {
+      "already_configured": "This household is already set up",
+      "reauth_successful": "The new token works",
+      "unique_id_mismatch": "This token belongs to a different household"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Culina",
+        "menu_options": {
+          "settings": "Announcements and music",
+          "add_music": "Add music for a cuisine",
+          "remove_music": "Remove music for a cuisine",
+          "done": "Save"
+        }
+      },
+      "settings": {
+        "title": "Announcements and music",
+        "data": {
+          "tts_entity": "Text-to-speech engine",
+          "announcements": "Announce the steps on the speaker",
+          "music": "Play music while cooking"
+        },
+        "data_description": {
+          "tts_entity": "The voice for the announcements. Without one, nothing is announced."
+        }
+      },
+      "add_music": {
+        "title": "Music for a cuisine",
+        "data": {
+          "cuisine": "Cuisine",
+          "media": "What to play"
+        },
+        "data_description": {
+          "media": "Anything the speaker can play: a favorite, a playlist, a radio station or a file. It repeats until cooking stops."
+        }
+      },
+      "remove_music": {
+        "title": "Remove music",
+        "data": {
+          "cuisines": "Cuisines"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cooking_session": {
+        "name": "Cooking session",
+        "state": {
+          "idle": "Idle",
+          "cooking": "Cooking",
+          "paused": "Paused"
+        }
+      }
+    }
+  }
+}

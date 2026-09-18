@@ -1,0 +1,13 @@
+{
+  "domain": "culina",
+  "name": "Culina",
+  "codeowners": ["@Kevinvandenhoek"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Kevinvandenhoek/culina-homeassistant",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/Kevinvandenhoek/culina-homeassistant/issues",
+  "requirements": ["python-socketio[asyncio-client]==5.17.0"],
+  "version": "0.1.0"
+}
