@@ -48,10 +48,12 @@ integration adds for you when it is missing. Sonos only accepts the streams that
 ## What it does
 
 - **Start**: the radio station for the cuisine starts on the speaker.
-- **While cooking**: one minute before a step ends, "step is almost done" (only for steps longer
-  than two minutes). When a step ends, "step is done" or "step is done, next up ..." when another
-  step starts at that moment. When the last step ends, "all done". Culina schedules steps in
-  parallel, so a hands-off step like simmering can run next to the step you are working on.
+- **Start**: the speaker reads the step you are on, with its instructions.
+- **While cooking**: one minute before a step ends, "one minute left". When a step ends and the
+  next one starts, "done with ..., now ..." followed by the instructions of the new step. A step
+  that starts while another one keeps running is read on its own, so you never have to look at the
+  screen. When the last step ends, "all done". Culina schedules steps in parallel, so a hands-off
+  step like simmering can run next to the step you are working on.
 - **Pause**: announcements stop, the music keeps playing.
 - **Stop**: announcements stop and the music stops.
 - **Restart**: after a Home Assistant restart, a running session is picked up again.
@@ -59,12 +61,15 @@ integration adds for you when it is missing. Sonos only accepts the streams that
 ## For your own automations
 
 `sensor.culina_cooking_session` is `idle`, `cooking` or `paused`, with attributes `recipe`,
-`cuisine`, `active_steps`, `elapsed_seconds`, `remaining_seconds` and `ends_at`.
+`cuisine`, `active_steps`, `active_step_descriptions`, `elapsed_seconds`, `remaining_seconds`
+and `ends_at`.
 
-Events, each with `recipe`, `step`, `next_step`, `count` and the announcement `text`:
+Events, each with `recipe`, `kind`, `step`, `next_step`, `description`, `count` and the spoken
+`text`:
 
+- `culina_step_started`
 - `culina_step_ending_soon`
-- `culina_step_done`
+- `culina_step_done` (kind `step_done` or `step_done_next`)
 - `culina_all_done`
 
 Switch announcements and music off in the options if you only want the sensor and the events.

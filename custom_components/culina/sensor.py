@@ -59,5 +59,6 @@ class CulinaCookingSensor(CoordinatorEntity[CulinaCoordinator], SensorEntity):
             ),
             "ends_at": data.ends_at.isoformat() if data.ends_at else None,
             "active_steps": [step.name for step in data.active],
+            "active_step_descriptions": [step.description for step in data.active],
             "hands_off": all(step.hands_off for step in data.active) if data.active else None,
         }

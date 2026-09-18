@@ -17,15 +17,19 @@ _DURATION_RE = re.compile(
 )
 
 KIND_ENDING_SOON = "step_ending_soon"
+KIND_STEP_STARTED = "step_started"
 KIND_STEP_DONE = "step_done"
 KIND_STEP_DONE_NEXT = "step_done_next"
 KIND_ALL_DONE = "all_done"
 
+# Only for households whose API does not send a template; the words normally
+# come from Culina in the household's language.
 FALLBACK_TEMPLATES = {
-    KIND_ENDING_SOON: "{{step}} is done in {{count}} minute",
-    "step_ending_soon_plural": "{{step}} is done in {{count}} minutes",
-    KIND_STEP_DONE: "{{step}} is done",
-    KIND_STEP_DONE_NEXT: "{{step}} is done, next up {{next}}",
+    KIND_ENDING_SOON: "{{count}} minute left for: {{step}}",
+    "step_ending_soon_plural": "{{count}} minutes left for: {{step}}",
+    KIND_STEP_STARTED: "Now: {{step}}. {{description}}",
+    KIND_STEP_DONE: "Done with: {{step}}.",
+    KIND_STEP_DONE_NEXT: "Done with: {{step}}. Now: {{next}}. {{description}}",
     KIND_ALL_DONE: "All steps are done, enjoy your meal",
 }
 
@@ -57,6 +61,7 @@ class Step:
     duration: float
     hands_off: bool = False
     optional: bool = False
+    description: str = ""
 
     @property
     def end(self) -> float:
@@ -72,6 +77,7 @@ class Step:
             duration=parse_duration(data.get("duration")),
             hands_off=bool(data.get("handsOff", False)),
             optional=bool(data.get("optional", False)),
+            description=str(data.get("description") or "").strip(),
         )
 
 
@@ -154,6 +160,20 @@ class Announcement:
     next_step: Step | None = None
     count: int = 0
 
+    @property
+    def description(self) -> str:
+        """The description that belongs in the sentence: of the step that starts."""
+        if self.kind == KIND_STEP_STARTED and self.step is not None:
+            return self.step.description
+        if self.kind == KIND_STEP_DONE_NEXT and self.next_step is not None:
+            return self.next_step.description
+        return ""
+
+
+def started_announcements(steps: tuple[Step, ...] | list[Step], elapsed: float) -> list[Announcement]:
+    """`step_started` for every step active at `elapsed`, for a session start."""
+    return [Announcement(at=elapsed, kind=KIND_STEP_STARTED, step=step) for step in active_steps(steps, elapsed)]
+
 
 def plan_announcements(
     steps: tuple[Step, ...] | list[Step],
@@ -162,22 +182,40 @@ def plan_announcements(
     ending_soon_min_duration: float = 120,
     tolerance: float = 1.0,
 ) -> list[Announcement]:
-    """All announcements for a schedule, sorted by time.
+    """All announcements for a schedule, sorted by time (Culina issue #609 rules).
 
-    - ending soon: `ending_soon_seconds` before a step's end, only for steps
-      longer than `ending_soon_min_duration`
-    - done: at a step's end; "done, next up X" when another step starts at
-      that moment, plain "done" otherwise
-    - all done: when the last step ends, instead of "done" for the steps
-      that end at that moment
+    At every boundary the steps that end are paired with the steps that start:
+    - a pair gives `step_done_next`, with the description of the new step
+    - a step that starts with nothing ending gives `step_started`
+    - a step that ends with nothing starting gives `step_done`
+    - the steps that end at the very end give one `all_done`
+    - `step_ending_soon` before a step's end, only for steps longer than
+      `ending_soon_min_duration`
+    So every description is heard once and no step is named twice.
     """
-    timed = [step for step in steps if step.duration > 0]
+    timed = sorted((step for step in steps if step.duration > 0), key=lambda step: (step.start, step.order))
     if not timed:
         return []
     total_end = max(step.end for step in timed)
-    ordered = sorted(timed, key=lambda step: (step.start, step.order))
+    boundaries: list[float] = []
+    for step in timed:
+        for moment in (step.start, step.end):
+            if not any(abs(moment - known) <= tolerance for known in boundaries):
+                boundaries.append(moment)
     result: list[Announcement] = []
-    for step in ordered:
+    for moment in sorted(boundaries):
+        ending = [step for step in timed if abs(step.end - moment) <= tolerance]
+        starting = [step for step in timed if abs(step.start - moment) <= tolerance]
+        if abs(moment - total_end) <= tolerance:
+            result.append(Announcement(at=total_end, kind=KIND_ALL_DONE))
+            continue
+        for done, new in zip(ending, starting):
+            result.append(Announcement(at=moment, kind=KIND_STEP_DONE_NEXT, step=done, next_step=new))
+        for done in ending[len(starting):]:
+            result.append(Announcement(at=moment, kind=KIND_STEP_DONE, step=done))
+        for new in starting[len(ending):]:
+            result.append(Announcement(at=moment, kind=KIND_STEP_STARTED, step=new))
+    for step in timed:
         if step.duration > ending_soon_min_duration:
             result.append(
                 Announcement(
@@ -187,23 +225,6 @@ def plan_announcements(
                     count=max(1, round(ending_soon_seconds / 60)),
                 )
             )
-        if abs(step.end - total_end) <= tolerance:
-            continue
-        next_step = next(
-            (
-                candidate
-                for candidate in ordered
-                if candidate is not step and abs(candidate.start - step.end) <= tolerance
-            ),
-            None,
-        )
-        if next_step is not None:
-            result.append(
-                Announcement(at=step.end, kind=KIND_STEP_DONE_NEXT, step=step, next_step=next_step)
-            )
-        else:
-            result.append(Announcement(at=step.end, kind=KIND_STEP_DONE, step=step))
-    result.append(Announcement(at=total_end, kind=KIND_ALL_DONE))
     return sorted(result, key=lambda item: item.at)
 
 
@@ -229,9 +250,10 @@ def render(templates: dict[str, str] | None, announcement: Announcement) -> str:
     text = source.get(key) or FALLBACK_TEMPLATES[announcement.kind]
     step = announcement.step.name if announcement.step else ""
     next_name = announcement.next_step.name if announcement.next_step else ""
-    return (
+    text = (
         text.replace("{{step}}", step)
         .replace("{{next}}", next_name)
         .replace("{{count}}", str(announcement.count))
-        .strip()
+        .replace("{{description}}", announcement.description)
     )
+    return re.sub(r"\s+", " ", text).strip()

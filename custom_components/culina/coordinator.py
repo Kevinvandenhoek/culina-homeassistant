@@ -34,6 +34,7 @@ from .const import (
     EVENT_ALL_DONE,
     EVENT_STEP_DONE,
     EVENT_STEP_ENDING_SOON,
+    EVENT_STEP_STARTED,
     STATE_COOKING,
     STATE_IDLE,
     STATE_PAUSED,
@@ -41,6 +42,7 @@ from .const import (
 from .session import (
     KIND_ALL_DONE,
     KIND_ENDING_SOON,
+    KIND_STEP_STARTED,
     Announcement,
     Recipe,
     Session,
@@ -49,6 +51,7 @@ from .session import (
     group_announcements,
     plan_announcements,
     render,
+    started_announcements,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,6 +61,7 @@ RECIPE_MAX_RETRIES = 6
 
 _EVENT_FOR_KIND = {
     KIND_ENDING_SOON: EVENT_STEP_ENDING_SOON,
+    KIND_STEP_STARTED: EVENT_STEP_STARTED,
     KIND_ALL_DONE: EVENT_ALL_DONE,
 }
 
@@ -95,6 +99,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._radio = RadioBrowser(user_agent=USER_AGENT, session=async_get_clientsession(hass))
         self._stations: dict[str, list[RadioStation]] = {}
         self._music_tried_for: str | None = None
+        self._start_announced_for: str | None = None
         self._closed = False
         self._socket = CulinaSocket(
             entry.data[CONF_TOKEN],
@@ -178,12 +183,17 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         if recipe_changed:
             self._music_started = False
             self._music_tried_for = None
+            self._start_announced_for = None
         if recipe_changed or self.recipe is None or self.recipe.id != new.recipe_id:
             await self._load_recipe(new.recipe_id)
         if not new.paused and not self._music_started:
             await self._start_music()
         self._reschedule()
         self._publish()
+        if not new.paused and self.recipe is not None and self._start_announced_for != self.recipe.id:
+            # Session start, also after a reconnect: say which steps are on now.
+            self._start_announced_for = self.recipe.id
+            await self._announce(started_announcements(self.recipe.steps, self._elapsed()))
 
     async def _stop(self) -> None:
         self._cancel_timers()
@@ -276,25 +286,33 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         async with self._lock:
             if self.session is None or self.session.paused or self.recipe is None:
                 return
-            texts = []
-            for item in group:
-                text = render(self.templates, item)
-                texts.append(text)
-                self.hass.bus.async_fire(
-                    _EVENT_FOR_KIND.get(item.kind, EVENT_STEP_DONE),
-                    {
-                        "recipe_id": self.recipe.id,
-                        "recipe": self.recipe.title,
-                        "step": item.step.name if item.step else None,
-                        "next_step": item.next_step.name if item.next_step else None,
-                        "count": item.count,
-                        "text": text,
-                    },
-                )
-            _LOGGER.info("Announcing at %ss: %s", round(group[0].at), " / ".join(texts))
-            if self.entry.options.get(CONF_ANNOUNCEMENTS, True):
-                await self._speak(". ".join(texts))
+            await self._announce(group)
             self._publish()
+
+    async def _announce(self, group: list[Announcement]) -> None:
+        """Fire an event per announcement and speak them as one message."""
+        if not group or self.recipe is None:
+            return
+        texts = []
+        for item in group:
+            text = render(self.templates, item)
+            texts.append(text)
+            self.hass.bus.async_fire(
+                _EVENT_FOR_KIND.get(item.kind, EVENT_STEP_DONE),
+                {
+                    "recipe_id": self.recipe.id,
+                    "recipe": self.recipe.title,
+                    "kind": item.kind,
+                    "step": item.step.name if item.step else None,
+                    "next_step": item.next_step.name if item.next_step else None,
+                    "description": item.description,
+                    "count": item.count,
+                    "text": text,
+                },
+            )
+        _LOGGER.info("Announcing at %ss: %s", round(group[0].at), " / ".join(texts))
+        if self.entry.options.get(CONF_ANNOUNCEMENTS, True):
+            await self._speak(" ".join(texts))
 
     # Speaker
 

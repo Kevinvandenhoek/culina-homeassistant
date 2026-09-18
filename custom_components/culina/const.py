@@ -16,6 +16,7 @@ ENDING_SOON_SECONDS = 60
 ENDING_SOON_MIN_DURATION = 120
 
 EVENT_STEP_ENDING_SOON = "culina_step_ending_soon"
+EVENT_STEP_STARTED = "culina_step_started"
 EVENT_STEP_DONE = "culina_step_done"
 EVENT_ALL_DONE = "culina_all_done"
 

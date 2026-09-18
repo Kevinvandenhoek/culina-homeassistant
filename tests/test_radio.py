@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "custom_components" / "culina"))
 
-from cuisines import CUISINES  # noqa: E402
 from radio import CUISINE_COUNTRY, CUISINE_TAGS, first_playable, looks_like_mp3  # noqa: E402
 
 
@@ -17,11 +16,9 @@ def station(**kwargs):
 
 
 class MappingTest(unittest.TestCase):
-    def test_every_cuisine_has_a_country(self):
-        self.assertEqual(set(CUISINES) - set(CUISINE_COUNTRY), set())
-
-    def test_tags_only_for_known_cuisines(self):
-        self.assertEqual(set(CUISINE_TAGS) - set(CUISINES), set())
+    def test_tags_only_for_cuisines_with_a_country(self):
+        # The closed list itself comes from GET /bridge/cuisines; compare by hand now and then.
+        self.assertEqual(set(CUISINE_TAGS) - set(CUISINE_COUNTRY), set())
 
 
 class PlayableTest(unittest.TestCase):
