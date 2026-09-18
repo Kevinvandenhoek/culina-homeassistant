@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -340,7 +341,11 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         # fallback for players without it. A station the speaker refuses is
         # skipped for the next candidate.
         via_media_source = "radio_browser" in self.hass.config.components
-        for station in stations:
+        http = async_get_clientsession(self.hass)
+        for station in random.sample(stations, len(stations)):
+            if not await serves_mp3(http, station.url):
+                _LOGGER.debug("Skipping %s: the stream is not MP3", station.name)
+                continue
             what = f"radio station {station.name}"
             candidates = []
             if via_media_source:
@@ -376,11 +381,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
             return []
         if cuisine_id not in self._stations:
             try:
-                self._stations[cuisine_id] = await find_stations(
-                    cuisine_id,
-                    browser=self._radio,
-                    probe=partial(serves_mp3, async_get_clientsession(self.hass)),
-                )
+                self._stations[cuisine_id] = await find_stations(cuisine_id, browser=self._radio)
             except Exception as err:  # noqa: BLE001 - Radio Browser is best effort
                 _LOGGER.warning("Radio Browser lookup for %s failed: %s", cuisine_id, err)
                 return []

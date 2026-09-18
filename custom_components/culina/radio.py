@@ -10,6 +10,7 @@ without Home Assistant.
 from __future__ import annotations
 
 import logging
+import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -207,43 +208,48 @@ async def find_stations(
     cuisine_id: str,
     *,
     browser: RadioBrowser | None = None,
-    limit: int = 3,
-    probe: Probe | None = None,
+    per_tag: int = 3,
+    limit: int = 8,
+    shuffle: bool = True,
 ) -> list[RadioStation]:
-    """Candidate stations for the cuisine, best first. A stream that Radio
-    Browser marks as working can still be refused by a speaker, so the caller
-    tries them in order. With a `probe`, only streams that really serve MP3
-    are kept."""
+    """A pool of candidate stations for the cuisine.
+
+    Up to `per_tag` stations for every tag, shuffled so that a cuisine does
+    not always sound the same (German is oktoberfest one night and schlager
+    the next). The country fallback only fills an empty pool. Streams are
+    not probed here; the caller checks a station right before playing it.
+    """
     own = browser is None
     browser = browser or RadioBrowser(user_agent=USER_AGENT)
     found: list[RadioStation] = []
     seen: set[str] = set()
 
-    async def add(stations: list[Station], tag: str | None) -> None:
+    def add(stations: list[Station], tag: str | None, count: int) -> None:
+        added = 0
         for station in stations:
-            if station.uuid in seen or len(found) >= limit:
+            key = station.name.strip().lower()
+            if key in seen or station.uuid in seen or added >= count:
                 continue
+            seen.add(key)
             seen.add(station.uuid)
-            if probe is not None and not await probe(station.url_resolved):
-                _LOGGER.debug("Skipping %s: stream is not MP3", station.name)
-                continue
             found.append(_as_station(station, tag))
+            added += 1
 
     try:
         for tag in CUISINE_TAGS.get(cuisine_id, []):
-            if len(found) >= limit:
-                break
             stations = await browser.stations(
                 filter_by=FilterBy.TAG_EXACT,
                 filter_term=tag,
                 hide_broken=True,
-                limit=10,
+                limit=15,
                 order=Order.VOTES,
                 reverse=True,
             )
-            await add(playable(stations, skip_talk=True), tag)
+            add(playable(stations, skip_talk=True), tag, per_tag)
+        if shuffle:
+            random.shuffle(found)
         country = CUISINE_COUNTRY.get(cuisine_id)
-        if country is not None and len(found) < limit:
+        if not found and country is not None:
             stations = await browser.stations(
                 filter_by=FilterBy.COUNTRY_CODE_EXACT,
                 filter_term=country,
@@ -252,8 +258,8 @@ async def find_stations(
                 order=Order.VOTES,
                 reverse=True,
             )
-            await add(playable(stations, skip_talk=True), None)
-        return found
+            add(playable(stations, skip_talk=True), None, limit)
+        return found[:limit]
     finally:
         if own:
             await browser.close()
@@ -262,9 +268,11 @@ async def find_stations(
 async def find_station(
     cuisine_id: str, *, browser: RadioBrowser | None = None, probe: Probe | None = None
 ) -> RadioStation | None:
-    """The best candidate, or None when Radio Browser has nothing usable."""
-    found = await find_stations(cuisine_id, browser=browser, limit=1, probe=probe)
-    return found[0] if found else None
+    """The best candidate in tag order, probed when a probe is given."""
+    for station in await find_stations(cuisine_id, browser=browser, shuffle=False):
+        if probe is None or await probe(station.url):
+            return station
+    return None
 
 
 async def register_click(station: RadioStation, *, browser: RadioBrowser | None = None) -> None:

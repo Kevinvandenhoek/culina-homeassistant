@@ -38,8 +38,9 @@ hits for Dutch, arabesk for Turkish, liscio for Italian. It is meant as a joke, 
 The tags per cuisine live in
 [`custom_components/culina/radio.py`](custom_components/culina/radio.py); every tag was checked
 to return a working station, and cuisines without a usable tag get the best voted music station
-of the country. Which station a tag resolves to depends on the votes on Radio Browser, so it can
-change over time.
+of the country. Each time cooking starts one of the stations for the cuisine is picked at random, so
+German is oktoberfest one night and schlager the next. Which stations a tag holds depends on the
+votes on Radio Browser, so it changes over time.
 
 The stations play through Home Assistant's own **Radio Browser** integration, which the Culina
 integration adds for you when it is missing. Sonos only accepts the streams that way.
