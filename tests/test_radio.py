@@ -34,6 +34,9 @@ class PlayableTest(unittest.TestCase):
         self.assertEqual(first_playable(stations).tags, ["news", "public radio"])
         self.assertEqual(first_playable(stations, skip_talk=True).tags, "pop, hits")
 
+    def test_skips_mms(self):
+        self.assertIsNone(first_playable([station(url_resolved="mms://x")]))
+
     def test_none_when_nothing_fits(self):
         self.assertIsNone(first_playable([station(hls=True)]))
 

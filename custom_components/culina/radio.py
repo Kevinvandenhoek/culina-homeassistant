@@ -134,25 +134,52 @@ def _tags(station: Station) -> set[str]:
     return {tag.strip().lower() for tag in raw or [] if tag}
 
 
-def first_playable(stations: list[Station], *, skip_talk: bool = False) -> Station | None:
-    """The best voted station a plain media player can stream."""
+def playable(stations: list[Station], *, skip_talk: bool = False) -> list[Station]:
+    """The stations a plain media player can stream, best voted first."""
+    result = []
     for station in stations:
-        if not station.url_resolved or station.hls:
-            continue
+        url = station.url_resolved or ""
+        if not url.startswith(("http://", "https://")) or station.hls:
+            continue  # mms:// and HLS streams fail on Sonos with UPnP 701
         if station.codec and station.codec.upper() not in PLAYABLE_CODECS:
             continue
         if skip_talk and _tags(station) & TALK_TAGS:
             continue
-        return station
-    return None
+        result.append(station)
+    return result
 
 
-async def find_station(cuisine_id: str, *, browser: RadioBrowser | None = None) -> RadioStation | None:
-    """A station for the cuisine, or None when Radio Browser has nothing usable."""
+def first_playable(stations: list[Station], *, skip_talk: bool = False) -> Station | None:
+    """The best voted station a plain media player can stream."""
+    found = playable(stations, skip_talk=skip_talk)
+    return found[0] if found else None
+
+
+def _as_station(station: Station, tag: str | None) -> RadioStation:
+    return RadioStation(station.uuid, station.name, station.url_resolved, station.country_code, tag)
+
+
+async def find_stations(
+    cuisine_id: str, *, browser: RadioBrowser | None = None, limit: int = 3
+) -> list[RadioStation]:
+    """Candidate stations for the cuisine, best first. A stream that Radio
+    Browser marks as working can still be refused by a speaker, so the caller
+    tries them in order."""
     own = browser is None
     browser = browser or RadioBrowser(user_agent=USER_AGENT)
+    found: list[RadioStation] = []
+    seen: set[str] = set()
+
+    def add(stations: list[Station], tag: str | None) -> None:
+        for station in stations:
+            if station.uuid not in seen and len(found) < limit:
+                seen.add(station.uuid)
+                found.append(_as_station(station, tag))
+
     try:
         for tag in CUISINE_TAGS.get(cuisine_id, []):
+            if len(found) >= limit:
+                break
             stations = await browser.stations(
                 filter_by=FilterBy.TAG_EXACT,
                 filter_term=tag,
@@ -161,27 +188,28 @@ async def find_station(cuisine_id: str, *, browser: RadioBrowser | None = None) 
                 order=Order.VOTES,
                 reverse=True,
             )
-            station = first_playable(stations, skip_talk=True)
-            if station is not None:
-                return RadioStation(station.uuid, station.name, station.url_resolved, station.country_code, tag)
+            add(playable(stations, skip_talk=True), tag)
         country = CUISINE_COUNTRY.get(cuisine_id)
-        if country is None:
-            return None
-        stations = await browser.stations(
-            filter_by=FilterBy.COUNTRY_CODE_EXACT,
-            filter_term=country,
-            hide_broken=True,
-            limit=25,
-            order=Order.VOTES,
-            reverse=True,
-        )
-        station = first_playable(stations, skip_talk=True)
-        if station is None:
-            return None
-        return RadioStation(station.uuid, station.name, station.url_resolved, station.country_code, None)
+        if country is not None and len(found) < limit:
+            stations = await browser.stations(
+                filter_by=FilterBy.COUNTRY_CODE_EXACT,
+                filter_term=country,
+                hide_broken=True,
+                limit=25,
+                order=Order.VOTES,
+                reverse=True,
+            )
+            add(playable(stations, skip_talk=True), None)
+        return found
     finally:
         if own:
             await browser.close()
+
+
+async def find_station(cuisine_id: str, *, browser: RadioBrowser | None = None) -> RadioStation | None:
+    """The best candidate, or None when Radio Browser has nothing usable."""
+    found = await find_stations(cuisine_id, browser=browser, limit=1)
+    return found[0] if found else None
 
 
 async def register_click(station: RadioStation, *, browser: RadioBrowser | None = None) -> None:

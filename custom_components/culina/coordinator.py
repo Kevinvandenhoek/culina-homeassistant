@@ -20,7 +20,7 @@ from homeassistant.util import dt as dt_util
 from radios import RadioBrowser
 
 from .api import CulinaApi, CulinaApiError, CulinaNotFoundError, CulinaSocket
-from .radio import USER_AGENT, RadioStation, find_station, register_click
+from .radio import USER_AGENT, RadioStation, find_stations, register_click
 from .const import (
     CONF_ANNOUNCEMENTS,
     CONF_CUISINE_MEDIA,
@@ -93,7 +93,7 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._music_started = False
         self._lock = asyncio.Lock()
         self._radio = RadioBrowser(user_agent=USER_AGENT, session=async_get_clientsession(hass))
-        self._stations: dict[str, RadioStation | None] = {}
+        self._stations: dict[str, list[RadioStation]] = {}
         self._music_tried_for: str | None = None
         self._closed = False
         self._socket = CulinaSocket(
@@ -332,62 +332,66 @@ class CulinaCoordinator(DataUpdateCoordinator[CookingState]):
         self._music_tried_for = self.recipe.id
         cuisine_id = self.recipe.cuisine_id
         media = (self.entry.options.get(CONF_CUISINE_MEDIA) or {}).get(cuisine_id or "")
-        station: RadioStation | None = None
+        player = self.entry.data[CONF_MEDIA_PLAYER]
         if media:
-            candidates = [(media["media_content_id"], media["media_content_type"])]
-            what = f"mapped media for {cuisine_id}"
-        else:
-            station = await self._radio_station(cuisine_id)
-            if station is None:
-                _LOGGER.info("No music for cuisine %s", cuisine_id)
-                return
-            # Through the Radio Browser media source when it is set up: Sonos
-            # then treats the stream as radio instead of a file and accepts it.
-            # The bare URL is the fallback for players without it.
+            if await self._play(player, media["media_content_id"], media["media_content_type"], f"mapped media for {cuisine_id}"):
+                self._music_started = True
+                try:
+                    await self.hass.services.async_call(
+                        "media_player", "repeat_set", {"entity_id": player, "repeat": "all"}, blocking=True
+                    )
+                except HomeAssistantError as err:
+                    _LOGGER.debug("Speaker %s does not repeat: %s", player, err)
+            return
+        stations = await self._radio_stations(cuisine_id)
+        if not stations:
+            _LOGGER.info("No music for cuisine %s", cuisine_id)
+            return
+        # Through the Radio Browser media source when it is set up: Sonos then
+        # treats the stream as radio instead of a file. The bare URL is the
+        # fallback for players without it. A station the speaker refuses is
+        # skipped for the next candidate.
+        via_media_source = "radio_browser" in self.hass.config.components
+        for station in stations:
+            what = f"radio station {station.name}"
             candidates = []
-            if "radio_browser" in self.hass.config.components:
+            if via_media_source:
                 candidates.append((f"media-source://radio_browser/{station.uuid}", "music"))
             candidates.append((station.url, "music"))
-            what = f"radio station {station.name}"
-        player = self.entry.data[CONF_MEDIA_PLAYER]
-        for content_id, content_type in candidates:
-            try:
-                await self.hass.services.async_call(
-                    "media_player",
-                    "play_media",
-                    {
-                        "entity_id": player,
-                        "media_content_id": content_id,
-                        "media_content_type": content_type,
-                    },
-                    blocking=True,
-                )
-                break
-            except HomeAssistantError as err:
-                _LOGGER.warning("Could not play %s (%s) on %s: %s", what, content_id, player, err)
-        else:
-            return
-        _LOGGER.info("Playing %s on %s", what, player)
-        self._music_started = True
-        if station is not None:
-            await register_click(station, browser=self._radio)
-            return
+            for content_id, content_type in candidates:
+                if await self._play(player, content_id, content_type, what):
+                    self._music_started = True
+                    await register_click(station, browser=self._radio)
+                    return
+        _LOGGER.warning("None of the stations for %s played on %s", cuisine_id, player)
+
+    async def _play(self, player: str, content_id: str, content_type: str, what: str) -> bool:
         try:
             await self.hass.services.async_call(
-                "media_player", "repeat_set", {"entity_id": player, "repeat": "all"}, blocking=True
+                "media_player",
+                "play_media",
+                {
+                    "entity_id": player,
+                    "media_content_id": content_id,
+                    "media_content_type": content_type,
+                },
+                blocking=True,
             )
         except HomeAssistantError as err:
-            _LOGGER.debug("Speaker %s does not repeat: %s", player, err)
+            _LOGGER.warning("Could not play %s (%s) on %s: %s", what, content_id, player, err)
+            return False
+        _LOGGER.info("Playing %s on %s", what, player)
+        return True
 
-    async def _radio_station(self, cuisine_id: str | None) -> RadioStation | None:
+    async def _radio_stations(self, cuisine_id: str | None) -> list[RadioStation]:
         if not cuisine_id:
-            return None
+            return []
         if cuisine_id not in self._stations:
             try:
-                self._stations[cuisine_id] = await find_station(cuisine_id, browser=self._radio)
+                self._stations[cuisine_id] = await find_stations(cuisine_id, browser=self._radio)
             except Exception as err:  # noqa: BLE001 - Radio Browser is best effort
                 _LOGGER.warning("Radio Browser lookup for %s failed: %s", cuisine_id, err)
-                return None
+                return []
         return self._stations[cuisine_id]
 
     async def _stop_music(self) -> None:
